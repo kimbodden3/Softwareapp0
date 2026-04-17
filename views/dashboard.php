@@ -50,6 +50,24 @@
             <small class="text-muted">En base de datos</small>
         </div>
     </div>
+    
+    <div class="col-md-3 col-sm-6 mb-4">
+        <div class="stat-card">
+            <div class="stat-card-icon warning">
+                <i class="fas fa-hand-holding-usd"></i>
+            </div>
+            <h6 class="text-muted">Cuentas por Cobrar</h6>
+            <?php
+            $cuentasPorCobrar = $db->fetchOne("
+                SELECT COUNT(*) as total, SUM(saldo_pendiente) as monto_pendiente 
+                FROM cuentas_por_cobrar 
+                WHERE estado IN ('pendiente', 'parcial', 'vencida')
+            ");
+            ?>
+            <h3><?php echo formatCurrency($cuentasPorCobrar['monto_pendiente'] ?? 0); ?></h3>
+            <small class="text-muted"><?php echo $cuentasPorCobrar['total'] ?? 0; ?> cuentas pendientes</small>
+        </div>
+    </div>
 </div>
 
 <!-- Alertas de Stock Bajo -->

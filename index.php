@@ -166,6 +166,22 @@ switch ($page) {
         include __DIR__ . '/includes/template.php';
         break;
         
+    case 'cuentas_por_cobrar':
+        // Cuentas por Cobrar
+        if (!$auth->hasRole(['admin', 'cajero'])) {
+            die('Acceso denegado');
+        }
+        
+        $currentPage = 'cuentas_por_cobrar';
+        $pageTitle = 'Cuentas por Cobrar';
+        
+        ob_start();
+        include __DIR__ . '/modules/cuentas_por_cobrar/index.php';
+        $content = ob_get_clean();
+        
+        include __DIR__ . '/includes/template.php';
+        break;
+        
     case 'servicios':
         // Servicios
         $currentPage = 'servicios';

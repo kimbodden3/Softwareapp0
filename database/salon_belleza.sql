@@ -237,6 +237,60 @@ CREATE TABLE password_reset (
 ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;
 
 -- ============================================
+-- TABLA: CUENTAS POR COBRAR (NUEVO MÓDULO)
+-- ============================================
+CREATE TABLE cuentas_por_cobrar (
+    id INT AUTO_INCREMENT PRIMARY KEY,
+    factura_id INT NOT NULL,
+    cliente_id INT NOT NULL,
+    usuario_id INT NOT NULL,
+    monto_total DECIMAL(10,2) NOT NULL,
+    monto_pagado DECIMAL(10,2) DEFAULT 0.00,
+    saldo_pendiente DECIMAL(10,2) NOT NULL,
+    fecha_emision DATE NOT NULL,
+    fecha_vencimiento DATE NOT NULL,
+    estado ENUM('pendiente', 'parcial', 'pagada', 'vencida', 'cancelada') DEFAULT 'pendiente',
+    notas TEXT NULL,
+    fecha_creacion TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+    fecha_actualizacion TIMESTAMP DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP,
+    FOREIGN KEY (factura_id) REFERENCES facturas(id) ON DELETE RESTRICT,
+    FOREIGN KEY (cliente_id) REFERENCES clientes(id) ON DELETE RESTRICT,
+    FOREIGN KEY (usuario_id) REFERENCES usuarios(id) ON DELETE RESTRICT,
+    INDEX idx_factura (factura_id),
+    INDEX idx_cliente (cliente_id),
+    INDEX idx_estado (estado),
+    INDEX idx_vencimiento (fecha_vencimiento)
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;
+
+-- ============================================
+-- TABLA: PAGOS CUENTAS POR COBRAR
+-- ============================================
+CREATE TABLE cuentas_por_cobrar_pagos (
+    id INT AUTO_INCREMENT PRIMARY KEY,
+    cuenta_por_cobrar_id INT NOT NULL,
+    usuario_id INT NOT NULL,
+    monto_pago DECIMAL(10,2) NOT NULL,
+    metodo_pago ENUM('efectivo', 'tarjeta', 'transferencia', 'cheque') NOT NULL,
+    referencia_pago VARCHAR(100) NULL,
+    notas TEXT NULL,
+    fecha_pago DATETIME NOT NULL,
+    fecha_registro TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+    FOREIGN KEY (cuenta_por_cobrar_id) REFERENCES cuentas_por_cobrar(id) ON DELETE RESTRICT,
+    FOREIGN KEY (usuario_id) REFERENCES usuarios(id) ON DELETE RESTRICT,
+    INDEX idx_cuenta (cuenta_por_cobrar_id),
+    INDEX idx_fecha (fecha_pago)
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;
+
+-- ============================================
+-- ACTUALIZACIÓN: Tabla facturas para soporte cuentas por cobrar
+-- ============================================
+ALTER TABLE facturas 
+ADD COLUMN es_credito TINYINT(1) DEFAULT 0,
+ADD COLUMN cuenta_por_cobrar_id INT NULL,
+ADD INDEX idx_es_credito (es_credito),
+ADD INDEX idx_cuenta_cobrar (cuenta_por_cobrar_id);
+
+-- ============================================
 -- DATOS DE PRUEBA INICIALES
 -- ============================================
 
@@ -297,6 +351,18 @@ INSERT INTO configuracion_cai (cai, rango_desde, rango_hasta, fecha_vencimiento)
 ('CAI-EJEMPLO-123456789012345', 1, 1000, '2025-12-31');
 
 -- ============================================
+-- DATOS DE PRUEBA PARA CUENTAS POR COBRAR
+-- ============================================
+
+-- Nota: Estos datos asumen que ya existen facturas en el sistema
+-- Para propósitos de prueba, se insertan directamente ejemplos de cuentas por cobrar
+
+-- Cliente de ejemplo para cuentas por cobrar
+INSERT INTO clientes (nombre, rtn, telefono, email, direccion) VALUES
+('Empresa Comercial S.A.', '88991111222233', '2233-1111', 'contacto@empresacomercial.hn', 'Boulevard Morazán, Tegucigalpa'),
+('María Elena Rodríguez', '08011990123456', '9988-7766', 'maria.rodriguez@email.com', 'Colonia Los Andes, San Pedro Sula');
+
+-- ============================================
 -- VISTAS ÚTILES PARA REPORTES
 -- ============================================
 
@@ -334,6 +400,66 @@ WHERE f.estado = 'pagada'
 GROUP BY s.id, c.id
 ORDER BY veces_vendido DESC
 LIMIT 10;
+
+-- ============================================
+-- VISTAS PARA CUENTAS POR COBRAR
+-- ============================================
+
+-- Vista: Resumen de Cuentas por Cobrar
+CREATE OR REPLACE VIEW v_cuentas_por_cobrar_resumen AS
+SELECT 
+    cpc.id,
+    cpc.factura_id,
+    f.numero_factura,
+    cpc.cliente_id,
+    cl.nombre as cliente_nombre,
+    cl.rtn as cliente_rtn,
+    cpc.usuario_id,
+    u.nombre_completo as usuario_nombre,
+    cpc.monto_total,
+    cpc.monto_pagado,
+    cpc.saldo_pendiente,
+    cpc.fecha_emision,
+    cpc.fecha_vencimiento,
+    cpc.estado,
+    DATEDIFF(cpc.fecha_vencimiento, CURDATE()) as dias_restantes,
+    CASE 
+        WHEN DATEDIFF(cpc.fecha_vencimiento, CURDATE()) < 0 THEN 'VENCIDA'
+        WHEN DATEDIFF(cpc.fecha_vencimiento, CURDATE()) <= 5 THEN 'POR VENCER'
+        ELSE 'AL CORRIENTE'
+    END as estado_alerta,
+    cpc.notas,
+    cpc.fecha_creacion
+FROM cuentas_por_cobrar cpc
+INNER JOIN clientes cl ON cpc.cliente_id = cl.id
+INNER JOIN usuarios u ON cpc.usuario_id = u.id
+INNER JOIN facturas f ON cpc.factura_id = f.id
+WHERE cpc.estado NOT IN ('cancelada')
+ORDER BY cpc.fecha_vencimiento ASC;
+
+-- Vista: Pagos Realizados
+CREATE OR REPLACE VIEW v_pagos_realizados AS
+SELECT 
+    cpp.id,
+    cpp.cuenta_por_cobrar_id,
+    cpc.factura_id,
+    f.numero_factura,
+    cpp.cuenta_por_cobrar_id,
+    cl.nombre as cliente_nombre,
+    cpp.usuario_id,
+    u.nombre_completo as usuario_registro,
+    cpp.monto_pago,
+    cpp.metodo_pago,
+    cpp.referencia_pago,
+    cpp.notas,
+    cpp.fecha_pago,
+    cpp.fecha_registro
+FROM cuentas_por_cobrar_pagos cpp
+INNER JOIN cuentas_por_cobrar cpc ON cpp.cuenta_por_cobrar_id = cpc.id
+INNER JOIN clientes cl ON cpc.cliente_id = cl.id
+INNER JOIN usuarios u ON cpp.usuario_id = u.id
+INNER JOIN facturas f ON cpc.factura_id = f.id
+ORDER BY cpp.fecha_pago DESC;
 
 -- ============================================
 -- FIN DEL SCRIPT DE BASE DE DATOS
