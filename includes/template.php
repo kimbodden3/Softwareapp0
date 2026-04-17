@@ -283,6 +283,14 @@
                 </a>
             </li>
             
+            <?php if ($auth->hasRole(['admin', 'cajero'])): ?>
+            <li>
+                <a href="<?php echo APP_URL; ?>index.php?page=cuentas_por_cobrar" class="<?php echo ($currentPage ?? '') === 'cuentas_por_cobrar' ? 'active' : ''; ?>">
+                    <i class="fas fa-hand-holding-usd"></i> Cuentas por Cobrar
+                </a>
+            </li>
+            <?php endif; ?>
+            
             <?php if ($auth->hasRole('admin')): ?>
             <li>
                 <a href="<?php echo APP_URL; ?>index.php?page=usuarios">
